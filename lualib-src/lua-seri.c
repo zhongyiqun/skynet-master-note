@@ -24,16 +24,16 @@
 #define TYPE_NUMBER_WORD 2		//2字节的整数类型
 #define TYPE_NUMBER_DWORD 4		//4字节的整数类型
 #define TYPE_NUMBER_QWORD 6		//8字节的整数类型
-#define TYPE_NUMBER_REAL 8
+#define TYPE_NUMBER_REAL 8		//浮点数类型
 
-#define TYPE_USERDATA 3
-#define TYPE_SHORT_STRING 4
+#define TYPE_USERDATA 3			//指针类型
+#define TYPE_SHORT_STRING 4		//短字符串类型
 // hibits 0~31 : len
-#define TYPE_LONG_STRING 5
+#define TYPE_LONG_STRING 5		//长字符串类型
 #define TYPE_TABLE 6
 
 #define MAX_COOKIE 32
-#define COMBINE_TYPE(t,v) ((t) | (v) << 3)		//用于加入低四位的类型值
+#define COMBINE_TYPE(t,v) ((t) | (v) << 3)		//用于加入类型值
 
 #define BLOCK_SIZE 128
 #define MAX_DEPTH 32
@@ -172,10 +172,15 @@ wb_boolean(struct write_block *wb, int boolean) {
 }
 
 /***************************
-函数功能：向写缓存队列中添加一个lua中的整数类型的值，
-		
+函数功能：向写缓存队列中添加一个整数类型的值，将整数分为这几种情况存入：
+		1）为0的整数，只需一个字节
+		2）超过4字节的整数，则先存入一个字节记录整数占的字节数，然后将该整数存入
+		3）负整数，用4字节存储，则先存入一个字节记录整数占的字节数，然后将该整数存入
+		4）小于256的整数，则先存入一个字节记录整数占的字节数，然后将该整数存入
+		5）占用两字节的整数，则先存入一个字节记录整数占的字节数，然后将该整数存入
+		6）其他整数，则先存入一个字节记录整数占的字节数，然后将该整数存入
 参数：
-	1）一个lua中的整数类型的值
+	1）一个整数类型的值
 返回值：无
 ***************************/
 static inline void
@@ -192,33 +197,45 @@ wb_integer(struct write_block *wb, lua_Integer v) {
 	} else if (v < 0) {
 		int32_t v32 = (int32_t)v;
 		uint8_t n = COMBINE_TYPE(type , TYPE_NUMBER_DWORD);	//4字节的整数类型
-		wb_push(wb, &n, 1);
-		wb_push(wb, &v32, sizeof(v32));
+		wb_push(wb, &n, 1);					//先存入一个字节记录整数占的长度
+		wb_push(wb, &v32, sizeof(v32));		//存入占4字节的负整数
 	} else if (v<0x100) {
 		uint8_t n = COMBINE_TYPE(type , TYPE_NUMBER_BYTE);	//整数类型值小于256
-		wb_push(wb, &n, 1);
+		wb_push(wb, &n, 1);					//先存入一个字节记录整数占得长度
 		uint8_t byte = (uint8_t)v;
-		wb_push(wb, &byte, sizeof(byte));
+		wb_push(wb, &byte, sizeof(byte));	//存入占1字节的整数
 	} else if (v<0x10000) {
 		uint8_t n = COMBINE_TYPE(type , TYPE_NUMBER_WORD);	//值为大于0x100小于0x10000的整数
-		wb_push(wb, &n, 1);
+		wb_push(wb, &n, 1);					//先存入一个字节记录整数占得长度
 		uint16_t word = (uint16_t)v;
 		wb_push(wb, &word, sizeof(word));	//存入占两个字节大小的整数
 	} else {
-		uint8_t n = COMBINE_TYPE(type , TYPE_NUMBER_DWORD);
-		wb_push(wb, &n, 1);
+		uint8_t n = COMBINE_TYPE(type , TYPE_NUMBER_DWORD);  //4字节的整数类型
+		wb_push(wb, &n, 1);					//先存入一个字节记录整数占得长度
 		uint32_t v32 = (uint32_t)v;
-		wb_push(wb, &v32, sizeof(v32));
+		wb_push(wb, &v32, sizeof(v32));		//存入占4字节的正整数
 	}
 }
 
+/***************************
+函数功能：向写缓存队列中添加一个浮点数类型的值	
+参数：
+	1）一个浮点数类型的值
+返回值：无
+***************************/
 static inline void
 wb_real(struct write_block *wb, double v) {
 	uint8_t n = COMBINE_TYPE(TYPE_NUMBER , TYPE_NUMBER_REAL);
-	wb_push(wb, &n, 1);
-	wb_push(wb, &v, sizeof(v));
+	wb_push(wb, &n, 1);			//先存入一个字节记录浮点数占得长度
+	wb_push(wb, &v, sizeof(v));	//存入浮点数
 }
 
+/***************************
+函数功能：向写缓存队列中添加一个指针类型的值	
+参数：
+	1）一个指针数类型的值
+返回值：无
+***************************/
 static inline void
 wb_pointer(struct write_block *wb, void *v) {
 	uint8_t n = TYPE_USERDATA;
@@ -226,28 +243,37 @@ wb_pointer(struct write_block *wb, void *v) {
 	wb_push(wb, &v, sizeof(v));
 }
 
+/***************************
+函数功能：向写缓存队列中添加一个字符串类型的值，按照以下规则存入
+		1）字符串长度不超过32，一个字节记录类型和长度，接着存入字符串
+		2）字符串长度大于32小于0x10000，一个字节记录类型和长度类型，2字节记录实际的字符串长度，接着存入字符串
+		3）字符串长度大于0x10000，一个字节记录类型和长度类型，4字节记录实际的字符串长度，接着存入字符串
+参数：
+	1）一个字符串类型的值，2）字符串的长度
+返回值：无
+***************************/
 static inline void
 wb_string(struct write_block *wb, const char *str, int len) {
-	if (len < MAX_COOKIE) {
+	if (len < MAX_COOKIE) {		//字符串长度不超过32
 		uint8_t n = COMBINE_TYPE(TYPE_SHORT_STRING, len);
-		wb_push(wb, &n, 1);
+		wb_push(wb, &n, 1);		//先存入记录字符串类型和长度的字节
 		if (len > 0) {
-			wb_push(wb, str, len);
+			wb_push(wb, str, len);	//存入字符串
 		}
 	} else {
 		uint8_t n;
-		if (len < 0x10000) {
+		if (len < 0x10000) {	//大于32小于0x10000长度的字符串
 			n = COMBINE_TYPE(TYPE_LONG_STRING, 2);
-			wb_push(wb, &n, 1);
+			wb_push(wb, &n, 1);	//先存入记录字符串类型的和长度类型的字节
 			uint16_t x = (uint16_t) len;
-			wb_push(wb, &x, 2);
+			wb_push(wb, &x, 2);	//存入字符串的长度
 		} else {
 			n = COMBINE_TYPE(TYPE_LONG_STRING, 4);
-			wb_push(wb, &n, 1);
+			wb_push(wb, &n, 1);		//先存入记录字符串类型的和长度类型的字节
 			uint32_t x = (uint32_t) len;
-			wb_push(wb, &x, 4);
+			wb_push(wb, &x, 4);		//存入字符串的长度
 		}
-		wb_push(wb, str, len);
+		wb_push(wb, str, len);		//存入字符串
 	}
 }
 
@@ -346,10 +372,10 @@ pack_one(lua_State *L, struct write_block *b, int index, int depth) {
 	case LUA_TNUMBER: {	//number类型
 		if (lua_isinteger(L, index)) {	//如果栈index处是个整数
 			lua_Integer x = lua_tointeger(L,index);		//获得该整数
-			wb_integer(b, x);
+			wb_integer(b, x);	//将整数存入缓存
 		} else {
-			lua_Number n = lua_tonumber(L,index);
-			wb_real(b,n);
+			lua_Number n = lua_tonumber(L,index);	//如果是实数
+			wb_real(b,n);	//将浮点数存入缓存
 		}
 		break;
 	}
