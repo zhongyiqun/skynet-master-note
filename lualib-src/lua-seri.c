@@ -191,11 +191,11 @@ wb_integer(struct write_block *wb, lua_Integer v) {
 		wb_push(wb, &v64, sizeof(v64));		//存入占8字节的整数
 	} else if (v < 0) {
 		int32_t v32 = (int32_t)v;
-		uint8_t n = COMBINE_TYPE(type , TYPE_NUMBER_DWORD);
+		uint8_t n = COMBINE_TYPE(type , TYPE_NUMBER_DWORD);	//4字节的整数类型
 		wb_push(wb, &n, 1);
 		wb_push(wb, &v32, sizeof(v32));
 	} else if (v<0x100) {
-		uint8_t n = COMBINE_TYPE(type , TYPE_NUMBER_BYTE);
+		uint8_t n = COMBINE_TYPE(type , TYPE_NUMBER_BYTE);	//整数类型值小于256
 		wb_push(wb, &n, 1);
 		uint8_t byte = (uint8_t)v;
 		wb_push(wb, &byte, sizeof(byte));
