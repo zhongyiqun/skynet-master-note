@@ -358,6 +358,13 @@ wb_table(lua_State *L, struct write_block *wb, int index, int depth) {
 	}
 }
 
+/***************************
+函数功能：将栈中的指定元素，存入写缓存中，
+		
+参数：
+	1）b写缓存队列，2）index栈中的第几个元素
+返回值：无
+***************************/
 static void
 pack_one(lua_State *L, struct write_block *b, int index, int depth) {
 	if (depth > MAX_DEPTH) {	//如果depth大于32
@@ -379,16 +386,16 @@ pack_one(lua_State *L, struct write_block *b, int index, int depth) {
 		}
 		break;
 	}
-	case LUA_TBOOLEAN: 
+	case LUA_TBOOLEAN: 		//向写缓存队列中添加一个值为布尔类型的值
 		wb_boolean(b, lua_toboolean(L,index));
 		break;
-	case LUA_TSTRING: {
+	case LUA_TSTRING: {		//向写缓存队列中添加一个字符串类型的值
 		size_t sz = 0;
 		const char *str = lua_tolstring(L,index,&sz);
 		wb_string(b, str, (int)sz);
 		break;
 	}
-	case LUA_TLIGHTUSERDATA:
+	case LUA_TLIGHTUSERDATA:	//向写缓存队列中添加一个指针类型的值
 		wb_pointer(b, lua_touserdata(L,index));
 		break;
 	case LUA_TTABLE: {
@@ -399,7 +406,7 @@ pack_one(lua_State *L, struct write_block *b, int index, int depth) {
 		break;
 	}
 	default:
-		wb_free(b);
+		wb_free(b);		//释放写缓存队列
 		luaL_error(L, "Unsupport type %s to serialize", lua_typename(L, type));
 	}
 }
@@ -407,7 +414,7 @@ pack_one(lua_State *L, struct write_block *b, int index, int depth) {
 
 static void
 pack_from(lua_State *L, struct write_block *b, int from) {
-	int n = lua_gettop(L) - from;
+	int n = lua_gettop(L) - from;	//返回从from到栈顶的元素个数
 	int i;
 	for (i=1;i<=n;i++) {
 		pack_one(L, b , from + i, 0);
