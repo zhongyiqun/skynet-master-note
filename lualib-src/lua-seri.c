@@ -324,9 +324,9 @@ wb_table_hash(lua_State *L, struct write_block * wb, int index, int depth, int a
 static void
 wb_table_metapairs(lua_State *L, struct write_block *wb, int index, int depth) {
 	uint8_t n = COMBINE_TYPE(TYPE_TABLE, 0);
-	wb_push(wb, &n, 1);
-	lua_pushvalue(L, index);
-	lua_call(L, 1, 3);
+	wb_push(wb, &n, 1);		//将一个字节的表类型写入缓存队列中
+	lua_pushvalue(L, index);	//将栈中要写入的表拷贝压入栈顶
+	lua_call(L, 1, 3);		//调用元方法__pairs，返回的三个值压入栈顶
 	for(;;) {
 		lua_pushvalue(L, -2);
 		lua_pushvalue(L, -2);
@@ -346,11 +346,11 @@ wb_table_metapairs(lua_State *L, struct write_block *wb, int index, int depth) {
 
 static void
 wb_table(lua_State *L, struct write_block *wb, int index, int depth) {
-	luaL_checkstack(L, LUA_MINSTACK, NULL);
+	luaL_checkstack(L, LUA_MINSTACK, NULL);		//将栈的空间扩展到top+LUA_MINSTACK
 	if (index < 0) {
 		index = lua_gettop(L) + index + 1;
 	}
-	if (luaL_getmetafield(L, index, "__pairs") != LUA_TNIL) {
+	if (luaL_getmetafield(L, index, "__pairs") != LUA_TNIL) {  	//如果表中有元方法__pairs，则将其压入栈
 		wb_table_metapairs(L, wb, index, depth);
 	} else {
 		int array_size = wb_table_array(L, wb, index, depth);
@@ -362,7 +362,7 @@ wb_table(lua_State *L, struct write_block *wb, int index, int depth) {
 函数功能：将栈中的指定元素，存入写缓存中，
 		
 参数：
-	1）b写缓存队列，2）index栈中的第几个元素
+	1）b写缓存队列，2）index栈中的第几个元素，3）depth递归调用的层次
 返回值：无
 ***************************/
 static void
@@ -398,7 +398,7 @@ pack_one(lua_State *L, struct write_block *b, int index, int depth) {
 	case LUA_TLIGHTUSERDATA:	//向写缓存队列中添加一个指针类型的值
 		wb_pointer(b, lua_touserdata(L,index));
 		break;
-	case LUA_TTABLE: {
+	case LUA_TTABLE: {			//向写缓存队列中添加一个表
 		if (index < 0) {
 			index = lua_gettop(L) + index + 1;
 		}
