@@ -16,6 +16,7 @@
 
 // #define DEBUG_LOG
 
+//获得本线程到当前代码系统CPU花费的时间 精确到秒
 static double
 get_time() {
 #if  !defined(__APPLE__)
@@ -40,6 +41,7 @@ get_time() {
 #endif
 }
 
+//获得当前CPU时间与start CPU时间之间的时间间隔
 static inline double 
 diff_time(double start) {
 	double now = get_time();
@@ -84,6 +86,13 @@ lstart(lua_State *L) {
 	return 0;
 }
 
+/***************************
+函数功能：线程结束处理，将t1[LUA_TTHREAD]和t1[LUA_TTHREAD]置为nil，
+		计算该线程从开始到结束的CPU总耗时时间
+	
+返回值：返回值的数量为1
+	1）该线程从开始到结束的CPU总耗时时间
+***************************/
 static int
 lstop(lua_State *L) {
 	if (lua_gettop(L) != 0) {	//栈中的元素数量不为0
@@ -92,25 +101,25 @@ lstop(lua_State *L) {
 	} else {
 		lua_pushthread(L);	//将当前lua状态机的主线程入栈
 	}
-	lua_pushvalue(L, 1);	// push coroutine
-	lua_rawget(L, lua_upvalueindex(1));
+	lua_pushvalue(L, 1);	// push coroutine 将当前lua状态机的主线程的副本入栈
+	lua_rawget(L, lua_upvalueindex(1));	//将第一个upvalue值即t1[LUA_TTHREAD]值入栈
 	if (lua_type(L, -1) != LUA_TNUMBER) {
 		return luaL_error(L, "Call profile.start() before profile.stop()");
 	} 
-	double ti = diff_time(lua_tonumber(L, -1));
-	lua_pushvalue(L, 1);	// push coroutine
-	lua_rawget(L, lua_upvalueindex(2));
-	double total_time = lua_tonumber(L, -1);
+	double ti = diff_time(lua_tonumber(L, -1));	//获得当前CPU时间和开始CPU时间之间的时间间隔
+	lua_pushvalue(L, 1);	// push coroutine 将当前lua状态机的主线程的副本入栈
+	lua_rawget(L, lua_upvalueindex(2));		//将第二个upvalue值即t2[LUA_TTHREAD]值入栈
+	double total_time = lua_tonumber(L, -1);	//获得第二个upvalue值即t2[LUA_TTHREAD]值
 
 	lua_pushvalue(L, 1);	// push coroutine
 	lua_pushnil(L);
-	lua_rawset(L, lua_upvalueindex(1));
+	lua_rawset(L, lua_upvalueindex(1));		//设置第一个upvalue值即t1[LUA_TTHREAD]值为nil
 
 	lua_pushvalue(L, 1);	// push coroutine
 	lua_pushnil(L);
-	lua_rawset(L, lua_upvalueindex(2));
+	lua_rawset(L, lua_upvalueindex(2));		//设置第二个upvalue值即t2[LUA_TTHREAD]值为nil
 
-	total_time += ti;
+	total_time += ti;		//该线程CUP的总运行时间
 	lua_pushnumber(L, total_time);
 #ifdef DEBUG_LOG
 	fprintf(stderr, "PROFILE [%p] stop (%lf/%lf)\n", lua_tothread(L,1), ti, total_time);
