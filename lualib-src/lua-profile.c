@@ -20,12 +20,12 @@ static double
 get_time() {
 #if  !defined(__APPLE__)
 	struct timespec ti;
-	clock_gettime(CLOCK_THREAD_CPUTIME_ID, &ti);
+	clock_gettime(CLOCK_THREAD_CPUTIME_ID, &ti);	//本线程到当前代码系统CPU花费的时间
 
 	int sec = ti.tv_sec & 0xffff;
 	int nsec = ti.tv_nsec;
 
-	return (double)sec + (double)nsec / NANOSEC;	
+	return (double)sec + (double)nsec / NANOSEC;	//精确到秒
 #else
 	struct task_thread_times_info aTaskInfo;
 	mach_msg_type_number_t aTaskInfoCount = TASK_THREAD_TIMES_INFO_COUNT;
@@ -50,41 +50,47 @@ diff_time(double start) {
 	}
 }
 
+/***************************
+函数功能：开始初始化，记录下CPU时间在第一个upvalue值中t1[LUA_TTHREAD]=ti，
+		初始化第二个upvalue值t2[LUA_TTHREAD]=0
+	
+返回值：成功返回0
+***************************/
 static int
 lstart(lua_State *L) {
-	if (lua_gettop(L) != 0) {
-		lua_settop(L,1);
-		luaL_checktype(L, 1, LUA_TTHREAD);
+	if (lua_gettop(L) != 0) {	//如果栈中的元素数量不为0
+		lua_settop(L,1);	//设置栈中的元素数量为1
+		luaL_checktype(L, 1, LUA_TTHREAD);	//检查第一个参数的类型
 	} else {
-		lua_pushthread(L);
+		lua_pushthread(L);	//将当前lua状态机的主线程入栈
 	}
-	lua_pushvalue(L, 1);	// push coroutine
-	lua_rawget(L, lua_upvalueindex(2));
-	if (!lua_isnil(L, -1)) {
+	lua_pushvalue(L, 1);	// push coroutine	将当前lua状态机的主线程的副本入栈
+	lua_rawget(L, lua_upvalueindex(2));		//将第二个upvalue值即t2[LUA_TTHREAD]值入栈
+	if (!lua_isnil(L, -1)) {	//如果值不为nil
 		return luaL_error(L, "Thread %p start profile more than once", lua_topointer(L, 1));
 	}
-	lua_pushvalue(L, 1);	// push coroutine
-	lua_pushnumber(L, 0);
-	lua_rawset(L, lua_upvalueindex(2));
+	lua_pushvalue(L, 1);	// push coroutine 将当前lua状态机的主线程的副本入栈
+	lua_pushnumber(L, 0);	//将数字0入栈
+	lua_rawset(L, lua_upvalueindex(2));		//设置第二个upvalue值即t2[LUA_TTHREAD]=0
 
-	lua_pushvalue(L, 1);	// push coroutine
-	double ti = get_time();
+	lua_pushvalue(L, 1);	// push coroutine	将当前lua状态机的主线程的副本入栈
+	double ti = get_time();	//本线程到当前代码系统CPU花费的时间 精确到秒
 #ifdef DEBUG_LOG
 	fprintf(stderr, "PROFILE [%p] start\n", L);
 #endif
 	lua_pushnumber(L, ti);
-	lua_rawset(L, lua_upvalueindex(1));
+	lua_rawset(L, lua_upvalueindex(1));		//设置第一个upvalue值即t1[LUA_TTHREAD]=ti
 
 	return 0;
 }
 
 static int
 lstop(lua_State *L) {
-	if (lua_gettop(L) != 0) {
-		lua_settop(L,1);
-		luaL_checktype(L, 1, LUA_TTHREAD);
+	if (lua_gettop(L) != 0) {	//栈中的元素数量不为0
+		lua_settop(L,1);	//设置栈中元素数量为1
+		luaL_checktype(L, 1, LUA_TTHREAD);	//检查栈中第一个元素的类型
 	} else {
-		lua_pushthread(L);
+		lua_pushthread(L);	//将当前lua状态机的主线程入栈
 	}
 	lua_pushvalue(L, 1);	// push coroutine
 	lua_rawget(L, lua_upvalueindex(1));
@@ -199,6 +205,11 @@ lyield_co(lua_State *L) {
 	return timing_yield(L);
 }
 
+/***************************
+函数功能：将注册了函数的表入栈，并设置注册函数的upvalue值
+	
+返回值：返回值的数量：1
+***************************/
 LUAMOD_API int
 luaopen_skynet_profile(lua_State *L) {
 	luaL_checkversion(L);
@@ -238,32 +249,32 @@ luaopen_skynet_profile(lua_State *L) {
 
 	lua_getfield(L, libtable, "resume");	//将注册函数"resume"对应的函数指针入栈
 	lua_pushcfunction(L, co_resume);		//将函数co_resume入栈
-	lua_setupvalue(L, -2, 3);				//调用注册函数"resume"对应的函数，upvalue值为第三个值nil
+	lua_setupvalue(L, -2, 3);				//设置闭包即注册函数"resume"对应的函数upvalue值的第三个值为coroutine.resume
 	lua_pop(L,1);							
 
 	lua_getfield(L, libtable, "resume_co");	//将注册函数"resume_co"对应的函数指针入栈
 	lua_pushcfunction(L, co_resume);		//将函数co_resume入栈
-	lua_setupvalue(L, -2, 3);				//调用注册函数"resume"对应的函数，upvalue值为第三个值nil
+	lua_setupvalue(L, -2, 3);				//设置闭包即注册函数"resume_co"对应的函数upvalue值的第三个值为coroutine.resume
 	lua_pop(L,1);
 
-	lua_getfield(L, -1, "yield");
+	lua_getfield(L, -1, "yield");			//将coroutine.yield的值压入栈
 
-	lua_CFunction co_yield = lua_tocfunction(L, -1);	
+	lua_CFunction co_yield = lua_tocfunction(L, -1);	//将coroutine.yield转换为C函数
 	if (co_yield == NULL)
 		return luaL_error(L, "Can't get coroutine.yield");
+	lua_pop(L,1);	//出栈
+
+	lua_getfield(L, libtable, "yield");		//将注册函数"yield"对应的函数指针入栈
+	lua_pushcfunction(L, co_yield);			//将函数co_yield入栈
+	lua_setupvalue(L, -2, 3);				//设置闭包即注册函数"yield"对应的函数upvalue值的第三个值为coroutine.yield
 	lua_pop(L,1);
 
-	lua_getfield(L, libtable, "yield");
-	lua_pushcfunction(L, co_yield);
-	lua_setupvalue(L, -2, 3);
+	lua_getfield(L, libtable, "yield_co");	//将注册函数"yield_co"对应的函数指针入栈
+	lua_pushcfunction(L, co_yield);			//将函数co_yield入栈
+	lua_setupvalue(L, -2, 3);				//设置闭包即注册函数"yield_co"对应的函数upvalue值的第三个值为coroutine.yield
 	lua_pop(L,1);
 
-	lua_getfield(L, libtable, "yield_co");
-	lua_pushcfunction(L, co_yield);
-	lua_setupvalue(L, -2, 3);
-	lua_pop(L,1);
-
-	lua_settop(L, libtable);
+	lua_settop(L, libtable);				//将注册了函数的表的栈的索引位置设置为栈顶
 
 	return 1;
 }

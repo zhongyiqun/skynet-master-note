@@ -404,14 +404,21 @@ lharbor(lua_State *L) {
 	return 2;
 }
 
+/***************************
+函数功能：将输入的多个字符串打包序列化，并将打包序列化的数据压入栈
+lua调用时需要传入的参数：
+	可以输入多个字符串
+返回值：返回值的数量为：1
+	1）打包序列化的数据
+***************************/
 static int
 lpackstring(lua_State *L) {
-	luaseri_pack(L);
-	char * str = (char *)lua_touserdata(L, -2);
-	int sz = lua_tointeger(L, -1);
-	lua_pushlstring(L, str, sz);
-	skynet_free(str);
-	return 1;
+	luaseri_pack(L);	//将栈中的内容打包序列化，并将打包序列化好的数据指针入栈，已经数据大小入栈
+	char * str = (char *)lua_touserdata(L, -2);		//获得这个序列化好的数据指针
+	int sz = lua_tointeger(L, -1);	//获得这个序列化好的数据的大小
+	lua_pushlstring(L, str, sz);	//将str指针所指的字符串副本入栈
+	skynet_free(str);		//释放str所指的内存
+	return 1;	
 }
 
 /***************************
@@ -454,6 +461,11 @@ lnow(lua_State *L) {
 	return 1;
 }
 
+/***************************
+函数功能：将注册了函数的表入栈，并设置注册函数的upvalue值为服务信息
+	
+返回值：返回值的数量：1
+***************************/
 LUAMOD_API int
 luaopen_skynet_core(lua_State *L) {
 	luaL_checkversion(L);	//检查是否有创建lua虚拟机
@@ -467,8 +479,8 @@ luaopen_skynet_core(lua_State *L) {
 		{ "error", lerror },
 		{ "tostring", ltostring },
 		{ "harbor", lharbor },
-		{ "pack", luaseri_pack },
-		{ "unpack", luaseri_unpack },
+		{ "pack", luaseri_pack },		//序列化函数
+		{ "unpack", luaseri_unpack },	//反序列化函数
 		{ "packstring", lpackstring },
 		{ "trash" , ltrash },
 		{ "callback", lcallback },
