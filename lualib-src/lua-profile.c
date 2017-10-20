@@ -54,7 +54,7 @@ diff_time(double start) {
 
 /***************************
 函数功能：开始初始化，记录下CPU时间在第一个upvalue值中t1[LUA_TTHREAD]=ti，
-		初始化第二个upvalue值t2[LUA_TTHREAD]=0
+		初始化第二个upvalue值t2[LUA_TTHREAD]=0，该值是记录总时间
 	
 返回值：成功返回0
 ***************************/
@@ -128,30 +128,40 @@ lstop(lua_State *L) {
 	return 1;
 }
 
+/***************************
+函数功能：每次运行协程前，如果需要统计时间，则记录下运行前的时间
+	
+返回值：coroutine.resume函数的值
+***************************/
 static int
 timing_resume(lua_State *L) {
-	lua_pushvalue(L, -1);	//将栈顶的副本入栈
-	lua_rawget(L, lua_upvalueindex(2));		//将第二个upvalue值
-	if (lua_isnil(L, -1)) {		// check total time
-		lua_pop(L,2);	// pop from coroutine
+	lua_pushvalue(L, -1);	//将栈顶的副本入栈 即协程的句柄
+	lua_rawget(L, lua_upvalueindex(2));		//将第二个upvalue值即t2[协程的句柄]值入栈
+	if (lua_isnil(L, -1)) {		// check total time 如果为nil
+		lua_pop(L,2);	// pop from coroutine 出栈
 	} else {
 		lua_pop(L,1);
-		double ti = get_time();
+		double ti = get_time();		//获得本线程到当前代码系统CPU花费的时间 精确到秒
 #ifdef DEBUG_LOG
 		fprintf(stderr, "PROFILE [%p] resume %lf\n", lua_tothread(L, -1), ti);
 #endif
-		lua_pushnumber(L, ti);
-		lua_rawset(L, lua_upvalueindex(1));	// set start time
+		lua_pushnumber(L, ti);		//将时间入栈
+		lua_rawset(L, lua_upvalueindex(1));	// set start time 设置第一个upvalue值即t1[协程的句柄]值为ti，即开始时间
 	}
 
-	lua_CFunction co_resume = lua_tocfunction(L, lua_upvalueindex(3));
+	lua_CFunction co_resume = lua_tocfunction(L, lua_upvalueindex(3)); 	//coroutine.resume
 
-	return co_resume(L);
+	return co_resume(L);	//运行coroutine.resume，即运行协程
 }
 
+/***************************
+函数功能：每次运行协程前，如果需要统计时间，则记录下运行前的时间
+	
+返回值：coroutine.resume函数的值
+***************************/
 static int
 lresume(lua_State *L) {
-	lua_pushvalue(L,1);		//将栈低的副本入栈
+	lua_pushvalue(L,1);		//将栈低的副本入栈 即协程的句柄
 	
 	return timing_resume(L);
 }

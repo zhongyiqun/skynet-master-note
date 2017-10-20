@@ -260,7 +260,7 @@ skynet_context_endless(uint32_t handle) {
 	skynet_context_release(ctx);	//递减服务信息的引用计数，如果计数为0则释放
 }
 
-//判断handle是否是本地节点，是返回true，harbor为节点编号
+//判断handle是否非本地节点，是返回true，harbor为节点编号
 int 
 skynet_isremote(struct skynet_context * ctx, uint32_t handle, int * harbor) {
 	int ret = skynet_harbor_message_isremote(handle);
@@ -411,7 +411,8 @@ struct command_func {
 	const char * (*func)(struct skynet_context * context, const char * param);	//命令名对应的函数
 };
 
-//
+//添加一个定时节点，时间到后推送一条消息到相应的服务，该服务根据本函数返回的session本该消息进行处理，
+//从而实现可定时执行某些操作
 static const char *
 cmd_timeout(struct skynet_context * context, const char * param) {
 	char * session_ptr = NULL;
@@ -436,10 +437,11 @@ cmd_reg(struct skynet_context * context, const char * param) {
 	}
 }
 
+//根据服务名获得":0x+服务编号"形式的服务编号
 static const char *
 cmd_query(struct skynet_context * context, const char * param) {
 	if (param[0] == '.') {
-		uint32_t handle = skynet_handle_findname(param+1);
+		uint32_t handle = skynet_handle_findname(param+1);	//根据服务名查找定位服务的编号（包括节点号和服务号），没找到返回0
 		if (handle) {
 			sprintf(context->result, ":%x", handle);
 			return context->result;

@@ -13,8 +13,10 @@ local profile = require "skynet.profile"
 local coroutine_resume = profile.resume 		--协程运行
 local coroutine_yield = profile.yield 			--协程挂起
 
+--可以通过协议名获得协议的信息，也可以通过协议id获得
 local proto = {}		--包含：name协议类型名，id协议id，pack打包函数，unpack解包函数
-local skynet = {		--协议类型
+
+local skynet = {		--协议类型，即上面的协议id，即消息类型
 	-- read skynet.h
 	PTYPE_TEXT = 0,
 	PTYPE_RESPONSE = 1,
@@ -39,28 +41,29 @@ function skynet.register_protocol(class)
 	local id = class.id
 	assert(proto[name] == nil and proto[id] == nil)
 	assert(type(name) == "string" and type(id) == "number" and id >=0 and id <=255)
-	proto[name] = class
-	proto[id] = class
+	proto[name] = class 	--通过协议名存储协议的信息
+	proto[id] = class 		--通过协议id存储协议的信息
 end
 
-local session_id_coroutine = {}
-local session_coroutine_id = {}
+local session_id_coroutine = {}		--以session为键，记录消息返回响应对应的发生消息session，调用的处理协同程序
+local session_coroutine_id = {}		--技能协程处理的响应消息session
 local session_coroutine_address = {}
 local session_response = {}
 local unresponse = {}
 
 local wakeup_queue = {}
-local sleep_session = {}
+local sleep_session = {}			--以协程句柄为键，等待该消息session响应的协程，即记录处于睡眠的协程
 
 local watching_service = {}
 local watching_session = {}
 local dead_service = {}
 local error_queue = {}
-local fork_queue = {}
+local fork_queue = {}			--协程队列
 
 -- suspend is function
 local suspend
 
+--将字符串"0x+服务编号"，转换成数字形式的服务编号
 local function string_to_handle(str)
 	return tonumber("0x" .. string.sub(str , 2))
 end
@@ -98,12 +101,12 @@ end
 
 -- coroutine reuse
 
-local coroutine_pool = setmetatable({}, { __mode = "kv" })
+local coroutine_pool = setmetatable({}, { __mode = "kv" }) --协同程序对象池
 
---创建协程，如果是第一个测运行，否则挂起加入队列
+--首先从协同程序对象池中取并运行如果没有则创建
 local function co_create(f)
-	local co = table.remove(coroutine_pool)
-	if co == nil then
+	local co = table.remove(coroutine_pool)	--取出协同程序对象池中的最后一个
+	if co == nil then 	--如果没有则创建一个
 		co = coroutine.create(function(...)
 			f(...)
 			while true do
@@ -114,7 +117,7 @@ local function co_create(f)
 			end
 		end)
 	else
-		coroutine_resume(co, f)
+		coroutine_resume(co, f)  --运行
 	end
 	return co
 end
@@ -159,7 +162,7 @@ function suspend(co, result, command, param, size)
 	end
 	if command == "CALL" then
 		session_id_coroutine[param] = co
-	elseif command == "SLEEP" then
+	elseif command == "SLEEP" then 		--唤起睡眠的协程
 		session_id_coroutine[param] = co
 		sleep_session[co] = param
 	elseif command == "RETURN" then
@@ -262,20 +265,21 @@ function suspend(co, result, command, param, size)
 	dispatch_error_queue()
 end
 
---定时指向某个函数
+--定时ti(单位为1/100秒)执行函数func
 function skynet.timeout(ti, func)
 	local session = c.intcommand("TIMEOUT",ti)
 	assert(session)
 	local co = co_create(func)		--创建协程
-	assert(session_id_coroutine[session] == nil)  --判断是否为新的协程
+	assert(session_id_coroutine[session] == nil)  --判断是否为新的session，用于接收消息响应时，定位到是响应哪一条消息，由发送消息的服务生成
 	session_id_coroutine[session] = co 		--记录下新协程的句柄
 end
 
+--睡眠ti(单位为1/100秒)等待协程被唤起
 function skynet.sleep(ti)
-	local session = c.intcommand("TIMEOUT",ti)
+	local session = c.intcommand("TIMEOUT",ti)		--发送计时
 	assert(session)
 	local succ, ret = coroutine_yield("SLEEP", session)
-	sleep_session[coroutine.running()] = nil
+	sleep_session[coroutine.running()] = nil		--协程已经唤起，则将表中的协程信息置空
 	if succ then
 		return
 	end
@@ -286,12 +290,14 @@ function skynet.sleep(ti)
 	end
 end
 
+--挂起协程
 function skynet.yield()
 	return skynet.sleep(0)
 end
 
+--等待指定协程唤起
 function skynet.wait(co)
-	local session = c.genid()
+	local session = c.genid() 	--分配一个消息的session
 	local ret, msg = coroutine_yield("SLEEP", session)
 	co = co or coroutine.running()
 	sleep_session[co] = nil
@@ -299,7 +305,7 @@ function skynet.wait(co)
 end
 
 local self_handle
-function skynet.self()
+function skynet.self()	--获得本服务的服务编号handle
 	if self_handle then
 		return self_handle
 	end
@@ -307,6 +313,7 @@ function skynet.self()
 	return self_handle
 end
 
+--根据服务名获得服务编号的数字形式
 function skynet.localname(name)
 	local addr = c.command("QUERY", name)
 	if addr then
@@ -314,10 +321,10 @@ function skynet.localname(name)
 	end
 end
 
-skynet.now = c.now
+skynet.now = c.now 		--获得系统的当前时间， 精确到1/100秒
 
 local starttime
-
+--获得开始时间，精确到秒
 function skynet.starttime()
 	if not starttime then
 		starttime = c.intcommand("STARTTIME")
@@ -325,12 +332,13 @@ function skynet.starttime()
 	return starttime
 end
 
+--获得系统当前的UTC时间，精确到秒
 function skynet.time()
 	return skynet.now()/100 + (starttime or skynet.starttime())
 end
 
 function skynet.exit()
-	fork_queue = {}	-- no fork coroutine can be execute after skynet.exit
+	fork_queue = {}	-- no fork coroutine can be execute after skynet.exit 将协程队列清空
 	skynet.send(".launcher","lua","REMOVE",skynet.self(), false)
 	-- report the sources that call me
 	for co, session in pairs(session_coroutine_id) do
@@ -355,37 +363,42 @@ function skynet.exit()
 	coroutine_yield "QUIT"
 end
 
+--获取lua全局变量key的值
 function skynet.getenv(key)
 	return (c.command("GETENV",key))
 end
 
+--设置lua全局变量key的值为value
 function skynet.setenv(key, value)
 	assert(c.command("GETENV",key) == nil, "Can't setenv exist key : " .. key)
 	c.command("SETENV",key .. " " ..value)
 end
 
---发送消息
+--发送经过打包的消息，参数如下
+--1）消息的目的服务handle或服务名，2）消息类型，3）消息中的session参数，为nil则系统分配，
+--4）消息的内容，5）如果消息内容为LUA_TLIGHTUSERDATA类型则需要该参数，该参数为消息内容的长度
 function skynet.send(addr, typename, ...)
 	local p = proto[typename]
 	return c.send(addr, p.id, 0 , p.pack(...))
 end
 
+--发生未经过打包的消息
 function skynet.rawsend(addr, typename, msg, sz)
 	local p = proto[typename]
 	return c.send(addr, p.id, 0 , msg, sz)
 end
 
-skynet.genid = assert(c.genid)
+skynet.genid = assert(c.genid)	--分配一个消息的session，为lua-skynet.c中的lgenid函数
 
-skynet.redirect = function(dest,source,typename,...)
+skynet.redirect = function(dest,source,typename,...)	--发送带有消息源source的消息内容函数，为lua-skynet.c中的lredirect函数
 	return c.redirect(dest, source, proto[typename].id, ...)
 end
 
-skynet.pack = assert(c.pack)
-skynet.packstring = assert(c.packstring)
-skynet.unpack = assert(c.unpack)
-skynet.tostring = assert(c.tostring)
-skynet.trash = assert(c.trash)
+skynet.pack = assert(c.pack)	--打包函数为lua-seri.c中的luaseri_pack函数
+skynet.packstring = assert(c.packstring)	--打包字符串的函数为lua-skynet.c中的lpackstring函数
+skynet.unpack = assert(c.unpack)	--解包函数为lua-seri.c中的luaseri_unpack函数
+skynet.tostring = assert(c.tostring) 	--转换为字符串函数，为lua-skynet.c中的ltostring函数
+skynet.trash = assert(c.trash)	--释放轻量用户数据，为lua-skynet.c中的ltrash函数
 
 local function yield_call(service, session)
 	watching_session[session] = service
@@ -466,6 +479,8 @@ function skynet.dispatch_unknown_response(unknown)
 	return prev
 end
 
+--创建协程，并将协程句柄插入表fork_queue，
+--协程运行时会调用创建时传入的函数func，以及传入的参数
 function skynet.fork(func,...)
 	local args = table.pack(...)
 	local co = co_create(function()
@@ -475,10 +490,17 @@ function skynet.fork(func,...)
 	return co
 end
 
+--[[
+函数功能：
+参数：
+	1）prototype消息类型，即skynet.h中定义的，2）msg消息内容，
+	3）sz消息大小，4）session对应回应哪条消息，5）source消息源
+返回值：无返回值
+]]
 local function raw_dispatch_message(prototype, msg, sz, session, source)
 	-- skynet.PTYPE_RESPONSE = 1, read skynet.h
-	if prototype == 1 then
-		local co = session_id_coroutine[session]
+	if prototype == 1 then --回应包消息类型
+		local co = session_id_coroutine[session] 	--获得处理回应消息的协程
 		if co == "BREAK" then
 			session_id_coroutine[session] = nil
 		elseif co == nil then
@@ -487,7 +509,7 @@ local function raw_dispatch_message(prototype, msg, sz, session, source)
 			session_id_coroutine[session] = nil
 			suspend(co, coroutine_resume(co, true, msg, sz))
 		end
-	else
+	else 	--不需要回应的消息
 		local p = proto[prototype]
 		if p == nil then
 			if session ~= 0 then
@@ -517,8 +539,9 @@ local function raw_dispatch_message(prototype, msg, sz, session, source)
 	end
 end
 
+--服务的消息处理回调函数
 function skynet.dispatch_message(...)
-	local succ, err = pcall(raw_dispatch_message,...)
+	local succ, err = pcall(raw_dispatch_message,...) 	--调用函数raw_dispatch_message
 	while true do
 		local key,co = next(fork_queue)
 		if co == nil then
@@ -558,6 +581,7 @@ function skynet.queryservice(global, ...)
 	end
 end
 
+--获得服务编号的字符串形式
 function skynet.address(addr)
 	if type(addr) == "number" then
 		return string.format(":%08x",addr)
@@ -566,11 +590,12 @@ function skynet.address(addr)
 	end
 end
 
+--输入一个服务节点编号，获得该服务的节点号以及判断该节点是否非本地节点，true表示是非本地节点
 function skynet.harbor(addr)
 	return c.harbor(addr)
 end
 
-skynet.error = c.error
+skynet.error = c.error 	--将error信息输出到log
 
 ----- register protocol
 -----注册协议
@@ -639,6 +664,7 @@ function skynet.pcall(start, ...)
 	return xpcall(init_template, debug.traceback, start, ...)
 end
 
+--初始化服务，调用函数开始start，成功则
 function skynet.init_service(start)
 	local ok, err = skynet.pcall(start)
 	if not ok then

@@ -98,7 +98,7 @@ forward_cb(struct skynet_context * context, void * ud, int type, int session, ui
 /***************************
 函数功能：在lua中注册消息处理的回调函数
 lua调用时需要传入的参数：
-	1）注册的函数，2）分发消息处理函数释放需要释放消息内容
+	1）注册的函数，2）分发消息处理函数是否需要释放消息内容
 返回值：返回值的数量：0
 	lua中无返回值
 ***************************/
@@ -368,7 +368,7 @@ lerror(lua_State *L) {
 }
 
 /***************************
-函数功能：将指定的数据copy入栈
+函数功能：将指定的数据转换为字符串copy入栈
 lua调用时需要传入的参数：
 	1）数据内容，2）数据的大小
 返回值：返回值的数量：1
@@ -381,12 +381,12 @@ ltostring(lua_State *L) {
 	}
 	char * msg = lua_touserdata(L,1);	//获得第一参数指针
 	int sz = luaL_checkinteger(L,2);	//检查第二个参数是否为整数，并获得第二个参数，即为第一个参数中数据的大小
-	lua_pushlstring(L,msg,sz);			//将第一个参数的数据副本入栈
+	lua_pushlstring(L,msg,sz);			//将第一个参数的数据副本转换为字符串入栈
 	return 1;
 }
 
 /***************************
-函数功能：输入一个服务的handle，获得该服务的节点号以及判断该节点是否本地节点
+函数功能：输入一个服务的handle，获得该服务的节点号以及判断该节点是否非本地节点
 lua调用时需要传入的参数：
 	1）一个服务的handle
 返回值：返回值的数量为：2
@@ -397,7 +397,7 @@ lharbor(lua_State *L) {
 	struct skynet_context * context = lua_touserdata(L, lua_upvalueindex(1));	//获得服务信息
 	uint32_t handle = (uint32_t)luaL_checkinteger(L,1);		//检查第一个参数是否为整数，并获得第一个参数，即为服务handle
 	int harbor = 0;
-	int remote = skynet_isremote(context, handle, &harbor);	//判断handle是否为本地节点，是返回true，harbor存储节点编号
+	int remote = skynet_isremote(context, handle, &harbor);	//判断handle是否为本地节点，是返回false，harbor存储节点编号
 	lua_pushinteger(L,harbor);		//将节点编号入栈
 	lua_pushboolean(L, remote);		//将判断结果入栈
 
