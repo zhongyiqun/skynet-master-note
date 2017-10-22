@@ -107,21 +107,22 @@ skynet_handle_retire(uint32_t handle) {
 	return ret;
 }
 
+//将全局服务信息结构中的所有服务信息删除
 void 
 skynet_handle_retireall() {
 	struct handle_storage *s = H;
 	for (;;) {
 		int n=0;
 		int i;
-		for (i=0;i<s->slot_size;i++) {
+		for (i=0;i<s->slot_size;i++) {	//删除全局服务信息中的所有服务信息
 			rwlock_rlock(&s->lock);
 			struct skynet_context * ctx = s->slot[i];
 			uint32_t handle = 0;
 			if (ctx)
-				handle = skynet_context_handle(ctx);
+				handle = skynet_context_handle(ctx);	//获得服务名
 			rwlock_runlock(&s->lock);
 			if (handle != 0) {
-				if (skynet_handle_retire(handle)) {
+				if (skynet_handle_retire(handle)) {	//将指定的服务信息从全局的服务信息数字中剔除掉
 					++n;
 				}
 			}

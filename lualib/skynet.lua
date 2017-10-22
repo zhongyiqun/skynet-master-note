@@ -374,9 +374,9 @@ function skynet.setenv(key, value)
 	c.command("SETENV",key .. " " ..value)
 end
 
---发送经过打包的消息，参数如下
---1）消息的目的服务handle或服务名，2）消息类型，3）消息中的session参数，为nil则系统分配，
---4）消息的内容，5）如果消息内容为LUA_TLIGHTUSERDATA类型则需要该参数，该参数为消息内容的长度
+--发送经过打包的消息，该消息的session参数为0表示不需要回复，参数如下，
+--1）消息的目的服务handle或服务名，2）消息类型
+--3）消息的内容，4）如果消息内容为LUA_TLIGHTUSERDATA类型则需要该参数，该参数为消息内容的长度
 function skynet.send(addr, typename, ...)
 	local p = proto[typename]
 	return c.send(addr, p.id, 0 , p.pack(...))
@@ -664,22 +664,24 @@ function skynet.pcall(start, ...)
 	return xpcall(init_template, debug.traceback, start, ...)
 end
 
---初始化服务，调用函数开始start，成功则
+--初始化服务，调用函数开始start，
+--成功则发送消息类型为"lua",给服务".launcher"，内容为"LAUNCHOK"
 function skynet.init_service(start)
 	local ok, err = skynet.pcall(start)
 	if not ok then
 		skynet.error("init service failed: " .. tostring(err))
-		skynet.send(".launcher","lua", "ERROR")
+		skynet.send(".launcher","lua", "ERROR")		--发送消息类型为"lua",给服务".launcher"，内容为"ERROR"
 		skynet.exit()
 	else
-		skynet.send(".launcher","lua", "LAUNCHOK")
+		skynet.send(".launcher","lua", "LAUNCHOK")	--发送消息类型为"lua",给服务".launcher"，内容为"LAUNCHOK"
 	end
 end
 
+--注册服务处理消息的回调函数，初始化服务，调用函数start_func
 function skynet.start(start_func)
 	c.callback(skynet.dispatch_message)		--注册服务的回调函数
 	skynet.timeout(0, function() 			--定时执行函数，此处定时的时间为0
-		skynet.init_service(start_func)
+		skynet.init_service(start_func) 	--初始化服务，调用函数start_func
 	end)
 end
 

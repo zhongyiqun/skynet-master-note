@@ -101,6 +101,7 @@ skynet_current_handle(void) {
 	}
 }
 
+//将无符号整数id转换成":+16进制的整数"形式的字符串
 static void
 id_to_hex(char * str, uint32_t id) {
 	int i;
@@ -390,6 +391,8 @@ skynet_queryname(struct skynet_context * context, const char * name) {
 	return 0;
 }
 
+//退出服务地址为 handle 的服务, 如果 handle 为 0 则退出 context 服务.
+//此函数在存在服务退出监控的情况下, 会向其发送消息.
 static void
 handle_exit(struct skynet_context * context, uint32_t handle) {
 	if (handle == 0) {
@@ -401,7 +404,7 @@ handle_exit(struct skynet_context * context, uint32_t handle) {
 	if (G_NODE.monitor_exit) {
 		skynet_send(context,  handle, G_NODE.monitor_exit, PTYPE_CLIENT, 0, NULL, 0);
 	}
-	skynet_handle_retire(handle);
+	skynet_handle_retire(handle);	//将指定的服务信息从全局的服务信息数字中剔除掉
 }
 
 // skynet command
@@ -450,13 +453,15 @@ cmd_query(struct skynet_context * context, const char * param) {
 	return NULL;
 }
 
+//从参数中获得服务名和服务编号的字符串形式
+//参数param的形式为：".+服务名 :+十六进制形式的服务编号"
 static const char *
 cmd_name(struct skynet_context * context, const char * param) {
 	int size = strlen(param);
 	char name[size+1];
 	char handle[size+1];
 	sscanf(param,"%s %s",name,handle);
-	if (handle[0] != ':') {
+	if (handle[0] != ':') {		//handle中的第一个字符符为':'
 		return NULL;
 	}
 	uint32_t handle_id = strtoul(handle+1, NULL, 16);
@@ -471,12 +476,15 @@ cmd_name(struct skynet_context * context, const char * param) {
 	return NULL;
 }
 
+//退出当前服务
 static const char *
 cmd_exit(struct skynet_context * context, const char * param) {
-	handle_exit(context, 0);
+	handle_exit(context, 0);	//退出当前服务
 	return NULL;
 }
 
+//通过param参数获得服务编号，
+//param可以是":+十六进制的服务编号"或者是".+服务名"形式
 static uint32_t
 tohandle(struct skynet_context * context, const char * param) {
 	uint32_t handle = 0;
@@ -491,15 +499,19 @@ tohandle(struct skynet_context * context, const char * param) {
 	return handle;
 }
 
+//kill掉指定的服务
+//param可以是":+十六进制的服务编号"或者是".+服务名"形式
 static const char *
 cmd_kill(struct skynet_context * context, const char * param) {
-	uint32_t handle = tohandle(context, param);
+	uint32_t handle = tohandle(context, param);	//获得param所指向的服务编号
 	if (handle) {
-		handle_exit(context, handle);
+		handle_exit(context, handle);	//退出服务
 	}
 	return NULL;
 }
 
+//启动一个param指定的服务，返回":+十六进制的服务编号"形式的字符串
+//param参数的形式为，启动服务要加载的动态库名空格链接需要传入的参数，
 static const char *
 cmd_launch(struct skynet_context * context, const char * param) {
 	size_t sz = strlen(param);
@@ -542,6 +554,8 @@ cmd_setenv(struct skynet_context * context, const char * param) {
 	return NULL;
 }
 
+//获得系统的开始实时时间，从UTC1970-1-1 0:0:0开始计时，精确到秒
+//返回结果是时间的一个字符串形式
 static const char *
 cmd_starttime(struct skynet_context * context, const char * param) {
 	uint32_t sec = skynet_starttime();
@@ -549,6 +563,7 @@ cmd_starttime(struct skynet_context * context, const char * param) {
 	return context->result;
 }
 
+//将全局服务信息结构中的所有服务信息删除
 static const char *
 cmd_abort(struct skynet_context * context, const char * param) {
 	skynet_handle_retireall();
@@ -566,7 +581,7 @@ cmd_monitor(struct skynet_context * context, const char * param) {
 		}
 		return NULL;
 	} else {
-		handle = tohandle(context, param);
+		handle = tohandle(context, param);	//获得服务标号
 	}
 	G_NODE.monitor_exit = handle;
 	return NULL;
