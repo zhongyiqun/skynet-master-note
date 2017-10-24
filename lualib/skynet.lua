@@ -685,14 +685,22 @@ function skynet.start(start_func)
 	end)
 end
 
+--该服务是否陷入死循环
 function skynet.endless()
 	return (c.intcommand("STAT", "endless") == 1)
 end
 
+--获得服务队列中消息队列的长度
 function skynet.mqlen()
 	return c.intcommand("STAT", "mqlen")
 end
 
+--获得指定服务的一些状态信息
+--what为"mqlen"，获得服务队列中消息队列的长度
+--what为"endless"，该服务是否陷入死循环
+--what为"cpu"，获得该服务消耗CPU时间，整数部分为秒，小数部分精确到微秒
+--what为"time"，获得距离该服务最近一条消息处理开始的时间间隔
+--what为"message"，该服务已经处理消息的数量
 function skynet.stat(what)
 	return c.intcommand("STAT", what)
 end

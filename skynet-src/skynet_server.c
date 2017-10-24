@@ -570,6 +570,8 @@ cmd_abort(struct skynet_context * context, const char * param) {
 	return NULL;
 }
 
+//监测退出的服务，param为NULL即获得监测的服务编号，有则返回":+十六进制的服务编号"，否则为NULL
+//param不为NULL，则添加监测退出的服务，返回NULL，param可以是":+十六进制的服务编号"或者是".+服务名"形式
 static const char *
 cmd_monitor(struct skynet_context * context, const char * param) {
 	uint32_t handle=0;
@@ -581,53 +583,61 @@ cmd_monitor(struct skynet_context * context, const char * param) {
 		}
 		return NULL;
 	} else {
-		handle = tohandle(context, param);	//获得服务标号
+		handle = tohandle(context, param);	//获得服务标号 param可以是":+十六进制的服务编号"或者是".+服务名"形式
 	}
 	G_NODE.monitor_exit = handle;
 	return NULL;
 }
 
+//获得指定服务的一些状态信息
+//param为"mqlen"，获得服务队列中消息队列的长度
+//param为"endless"，该服务是否陷入死循环
+//param为"cpu"，获得该服务消耗CPU时间，整数部分为秒，小数部分精确到微秒
+//param为"time"，获得距离该服务最近一条消息处理开始的时间间隔
+//param为"message"，该服务已经处理消息的数量
 static const char *
 cmd_stat(struct skynet_context * context, const char * param) {
-	if (strcmp(param, "mqlen") == 0) {
-		int len = skynet_mq_length(context->queue);
+	if (strcmp(param, "mqlen") == 0) {		//如果param为"mqlen"
+		int len = skynet_mq_length(context->queue);	//获得服务队列中消息队列的长度
 		sprintf(context->result, "%d", len);
-	} else if (strcmp(param, "endless") == 0) {
-		if (context->endless) {
-			strcpy(context->result, "1");
-			context->endless = false;
+	} else if (strcmp(param, "endless") == 0) {		//如果param为"endless"
+		if (context->endless) {					//该服务是否陷入死循环
+			strcpy(context->result, "1");		//陷入死循环
+			context->endless = false;			//清除标记
 		} else {
 			strcpy(context->result, "0");
 		}
-	} else if (strcmp(param, "cpu") == 0) {
+	} else if (strcmp(param, "cpu") == 0) {		//如果param为"cpu"
 		double t = (double)context->cpu_cost / 1000000.0;	// microsec
-		sprintf(context->result, "%lf", t);
-	} else if (strcmp(param, "time") == 0) {
+		sprintf(context->result, "%lf", t);		//获得该服务消耗CPU时间，整数部分为秒，小数部分精确到微秒
+	} else if (strcmp(param, "time") == 0) {	//如果param为"time"
 		if (context->profile) {
-			uint64_t ti = skynet_thread_time() - context->cpu_start;
+			uint64_t ti = skynet_thread_time() - context->cpu_start;	//获得距离该服务最近一条消息处理开始的时间间隔
 			double t = (double)ti / 1000000.0;	// microsec
 			sprintf(context->result, "%lf", t);
 		} else {
 			strcpy(context->result, "0");
 		}
-	} else if (strcmp(param, "message") == 0) {
-		sprintf(context->result, "%d", context->message_count);
+	} else if (strcmp(param, "message") == 0) {	//如果param为"message"
+		sprintf(context->result, "%d", context->message_count);		//该服务已经处理消息的数量
 	} else {
 		context->result[0] = '\0';
 	}
 	return context->result;
 }
 
+//为指定服务打开一个log文件，该文件的名字为：指定服务编号的十六进制形式.log
+//param可以是":+十六进制的服务编号"或者是".+服务名"形式
 static const char *
 cmd_logon(struct skynet_context * context, const char * param) {
-	uint32_t handle = tohandle(context, param);
+	uint32_t handle = tohandle(context, param); //获得服务标号 param可以是":+十六进制的服务编号"或者是".+服务名"形式
 	if (handle == 0)
 		return NULL;
-	struct skynet_context * ctx = skynet_handle_grab(handle);
+	struct skynet_context * ctx = skynet_handle_grab(handle);	//根据服务编号（包含节点号和服务号），获得服务信息
 	if (ctx == NULL)
 		return NULL;
 	FILE *f = NULL;
-	FILE * lastf = ctx->logfile;
+	FILE * lastf = ctx->logfile;	//该服务的日志输出的文件
 	if (lastf == NULL) {
 		f = skynet_log_open(context, handle);
 		if (f) {
@@ -637,16 +647,18 @@ cmd_logon(struct skynet_context * context, const char * param) {
 			}
 		}
 	}
-	skynet_context_release(ctx);
+	skynet_context_release(ctx);	//递减服务信息的引用计数，如果计数为0则释放
 	return NULL;
 }
 
+//关闭指定服务的log文件，
+//param可以是":+十六进制的服务编号"或者是".+服务名"形式
 static const char *
 cmd_logoff(struct skynet_context * context, const char * param) {
-	uint32_t handle = tohandle(context, param);
+	uint32_t handle = tohandle(context, param);	//获得服务标号 param可以是":+十六进制的服务编号"或者是".+服务名"形式
 	if (handle == 0)
 		return NULL;
-	struct skynet_context * ctx = skynet_handle_grab(handle);
+	struct skynet_context * ctx = skynet_handle_grab(handle);	//根据服务编号（包含节点号和服务号），获得服务信息
 	if (ctx == NULL)
 		return NULL;
 	FILE * f = ctx->logfile;
@@ -660,12 +672,14 @@ cmd_logoff(struct skynet_context * context, const char * param) {
 	return NULL;
 }
 
+//调用指定服务的动态库的库文件名_signal的API函数
+//param可以是":+十六进制的服务编号"或者是".+服务名"形式
 static const char *
 cmd_signal(struct skynet_context * context, const char * param) {
-	uint32_t handle = tohandle(context, param);
+	uint32_t handle = tohandle(context, param);	//获得服务标号 param可以是":+十六进制的服务编号"或者是".+服务名"形式
 	if (handle == 0)
 		return NULL;
-	struct skynet_context * ctx = skynet_handle_grab(handle);
+	struct skynet_context * ctx = skynet_handle_grab(handle);	//根据服务编号（包含节点号和服务号），获得服务信息
 	if (ctx == NULL)
 		return NULL;
 	param = strchr(param, ' ');

@@ -132,7 +132,7 @@ skynet_handle_retireall() {
 	}
 }
 
-//根据服务编号（包含节点号和服务号），获得服务信息
+//根据服务编号（包含节点号和服务号），获得服务信息，增加服务信息的引用计数
 struct skynet_context * 
 skynet_handle_grab(uint32_t handle) {
 	struct handle_storage *s = H;		//全局所有的服务信息
