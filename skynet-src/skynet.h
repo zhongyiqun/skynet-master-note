@@ -22,7 +22,7 @@
 #define PTYPE_RESERVED_SNAX 11
 
 #define PTYPE_TAG_DONTCOPY 0x10000			//该类型消息在发送时不需要进行拷贝，一般为服务发送给自己的消息
-#define PTYPE_TAG_ALLOCSESSION 0x20000
+#define PTYPE_TAG_ALLOCSESSION 0x20000		//标记消息的session需要系统分配
 
 struct skynet_context;
 

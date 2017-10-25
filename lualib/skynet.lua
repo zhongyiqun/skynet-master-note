@@ -375,8 +375,8 @@ function skynet.setenv(key, value)
 end
 
 --发送经过打包的消息，该消息的session参数为0表示不需要回复，参数如下，
---1）消息的目的服务handle或服务名，2）消息类型
---3）消息的内容，4）如果消息内容为LUA_TLIGHTUSERDATA类型则需要该参数，该参数为消息内容的长度
+--1）消息的目的服务handle或服务名，可以为".+服务名"或者":0x服务编号"，2）消息类型
+--3）之后的参数都为消息内容
 function skynet.send(addr, typename, ...)
 	local p = proto[typename]
 	return c.send(addr, p.id, 0 , p.pack(...))
@@ -400,19 +400,24 @@ skynet.unpack = assert(c.unpack)	--解包函数为lua-seri.c中的luaseri_unpack
 skynet.tostring = assert(c.tostring) 	--转换为字符串函数，为lua-skynet.c中的ltostring函数
 skynet.trash = assert(c.trash)	--释放轻量用户数据，为lua-skynet.c中的ltrash函数
 
+--
 local function yield_call(service, session)
-	watching_session[session] = service
-	local succ, msg, sz = coroutine_yield("CALL", session)
-	watching_session[session] = nil
+	watching_session[session] = service 		--观察的消息session对应的服务handle或服务名
+	local succ, msg, sz = coroutine_yield("CALL", session)	--挂起协程
+	watching_session[session] = nil 		--清空观察列表
 	if not succ then
 		error "call failed"
 	end
 	return msg,sz
 end
 
+--给指定的服务发生消息，消息中的session参数为系统分配，
+--addr为消息的目的服务handle或服务名，可以为".+服务名"或者":0x服务编号"，
+--typename为消息的类型，可以为名字也可以为id，
+--之后的参数为消息内容
 function skynet.call(addr, typename, ...)
 	local p = proto[typename]
-	local session = c.send(addr, p.id , nil , p.pack(...))
+	local session = c.send(addr, p.id , nil , p.pack(...)) --向指定服务发生消息
 	if session == nil then
 		error("call to invalid address " .. skynet.address(addr))
 	end

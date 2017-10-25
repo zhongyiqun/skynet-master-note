@@ -90,6 +90,7 @@ context_dec() {
 	ATOM_DEC(&G_NODE.total);
 }
 
+//获得当前线程处理的服务的服务编号
 uint32_t 
 skynet_current_handle(void) {
 	if (G_NODE.init) {
@@ -128,7 +129,7 @@ drop_message(struct skynet_message *msg, void *ud) {
 	skynet_send(NULL, source, msg->source, PTYPE_ERROR, 0, NULL, 0);
 }
 
-//新建一个服务信息
+//新建一个服务信息 name为服务的动态库名，param为传入的参数
 struct skynet_context * 
 skynet_context_new(const char * name, const char *param) {
 	struct skynet_module * mod = skynet_module_query(name);		//获得指定文件名的动态连接库信息
@@ -453,7 +454,7 @@ cmd_query(struct skynet_context * context, const char * param) {
 	return NULL;
 }
 
-//从参数中获得服务名和服务编号的字符串形式
+//设置指定服务的服务名，从参数中获得服务名和服务编号的字符串形式
 //参数param的形式为：".+服务名 :+十六进制形式的服务编号"
 static const char *
 cmd_name(struct skynet_context * context, const char * param) {
@@ -511,7 +512,7 @@ cmd_kill(struct skynet_context * context, const char * param) {
 }
 
 //启动一个param指定的服务，返回":+十六进制的服务编号"形式的字符串
-//param参数的形式为，启动服务要加载的动态库名空格链接需要传入的参数，
+//param参数的形式为：启动服务要加载的动态库名空格链接需要传入的参数，
 static const char *
 cmd_launch(struct skynet_context * context, const char * param) {
 	size_t sz = strlen(param);

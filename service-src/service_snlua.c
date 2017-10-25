@@ -150,7 +150,7 @@ launch_cb(struct skynet_context * context, void *ud, int type, int session, uint
 	return 0;
 }
 
-//初始化snlua服务实例l，ctx为服务信息，agrs="bootstrap"，
+//初始化snlua服务实例l，ctx为服务信息，agrs="bootstrap"，这个参数用于调用相应的lua脚本bootstrap.lua
 //注册服务的回调函数，以及向自己发送一条消息，说明初始化完后调用回调函数launch_cb
 int
 snlua_init(struct snlua *l, struct skynet_context *ctx, const char * args) {

@@ -1,10 +1,12 @@
 local skynet = require "skynet"
 local c = require "skynet.core"
 
+--启动一个服务，返回服务编号
+--第一个参数为服务的动态库名，第二个参数为传入的参数，第二个参数用于服务初始化完后调用相应的lua脚本
 function skynet.launch(...)
-	local addr = c.command("LAUNCH", table.concat({...}," "))
+	local addr = c.command("LAUNCH", table.concat({...}," "))	--启动一个服务，返回":+十六进制的服务编号"形式的字符串
 	if addr then
-		return tonumber("0x" .. string.sub(addr , 2))
+		return tonumber("0x" .. string.sub(addr , 2))	--返回服务编号
 	end
 end
 
@@ -16,10 +18,12 @@ function skynet.kill(name)
 	c.command("KILL",name)
 end
 
+--将全局服务信息结构中的所有服务信息删除
 function skynet.abort()
 	c.command("ABORT")
 end
 
+--
 local function globalname(name, handle)
 	local c = string.sub(name,1,1)
 	assert(c ~= ':')
@@ -43,9 +47,12 @@ function skynet.register(name)
 	end
 end
 
+--设置指定服务的服务名，分为本地的和远程的
+--本地的name为".+服务名"，handle为服务编号
+--远程的name为"服务名"，handle为服务编号
 function skynet.name(name, handle)
 	if not globalname(name, handle) then
-		c.command("NAME", name .. " " .. skynet.address(handle))
+		c.command("NAME", name .. " " .. skynet.address(handle))	--设置指定服务的服务名
 	end
 end
 

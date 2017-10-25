@@ -300,7 +300,7 @@ send_message(lua_State *L, int source, int idx_type) {
 /***************************
 函数功能：发送不需要回复的消息内容，因为source为0
 lua调用时需要传入的参数：
-	1）消息的目的服务handle或服务名，2）消息类型，3）消息中的session参数，为nil则系统分配，
+	1）消息的目的服务handle或服务名，可以为".+服务名"或者":0x服务编号"，2）消息类型，3）消息中的session参数，为nil则系统分配，
 	4）消息的内容，5）如果消息内容为LUA_TLIGHTUSERDATA类型则需要该参数，该参数为消息内容的长度
 返回值：返回值的数量：1
 	1）将session入栈
