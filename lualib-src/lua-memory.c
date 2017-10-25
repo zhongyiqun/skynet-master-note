@@ -65,7 +65,7 @@ luaopen_skynet_memory(lua_State *L) {
 		{ NULL, NULL },
 	};
 
-	luaL_newlib(L,l);
+	luaL_newlib(L,l);	//创建一张新的表，并把列表 l 中的函数注册进去
 
 	return 1;
 }
