@@ -400,10 +400,11 @@ skynet.unpack = assert(c.unpack)	--解包函数为lua-seri.c中的luaseri_unpack
 skynet.tostring = assert(c.tostring) 	--转换为字符串函数，为lua-skynet.c中的ltostring函数
 skynet.trash = assert(c.trash)	--释放轻量用户数据，为lua-skynet.c中的ltrash函数
 
---
+
+--把当前协程添加到观察列表，挂起协程，等待协程唤起
 local function yield_call(service, session)
 	watching_session[session] = service 		--观察的消息session对应的服务handle或服务名
-	local succ, msg, sz = coroutine_yield("CALL", session)	--挂起协程
+	local succ, msg, sz = coroutine_yield("CALL", session)	--挂起协程，给coroutine_resume传入的参数为"CALL", session
 	watching_session[session] = nil 		--清空观察列表
 	if not succ then
 		error "call failed"
@@ -451,8 +452,10 @@ function skynet.wakeup(co)
 	end
 end
 
+--修改指定 typename 类型的协议注册 dispatch 函数为func
+--func为nil返回指定 typename 类型的协议是否有 dispatch 函数
 function skynet.dispatch(typename, func)
-	local p = proto[typename]
+	local p = proto[typename]	--获得协议信息
 	if func then
 		local ret = p.dispatch
 		p.dispatch = func
@@ -496,7 +499,7 @@ function skynet.fork(func,...)
 end
 
 --[[
-函数功能：
+函数功能：服务的消息处理函数，根据消息类型，分为需要回应的消息和不需要回应的消息处理
 参数：
 	1）prototype消息类型，即skynet.h中定义的，2）msg消息内容，
 	3）sz消息大小，4）session对应回应哪条消息，5）source消息源
@@ -504,7 +507,7 @@ end
 ]]
 local function raw_dispatch_message(prototype, msg, sz, session, source)
 	-- skynet.PTYPE_RESPONSE = 1, read skynet.h
-	if prototype == 1 then --回应包消息类型
+	if prototype == 1 then --回应包消息类型 消息类型为 skynet.PTYPE_RESPONSE 的消息
 		local co = session_id_coroutine[session] 	--获得处理回应消息的协程
 		if co == "BREAK" then
 			session_id_coroutine[session] = nil
@@ -515,7 +518,7 @@ local function raw_dispatch_message(prototype, msg, sz, session, source)
 			suspend(co, coroutine_resume(co, true, msg, sz))
 		end
 	else 	--不需要回应的消息
-		local p = proto[prototype]
+		local p = proto[prototype]	--获得该消息类型的协议信息
 		if p == nil then
 			if session ~= 0 then
 				c.send(source, skynet.PTYPE_ERROR, session, "")
@@ -524,7 +527,7 @@ local function raw_dispatch_message(prototype, msg, sz, session, source)
 			end
 			return
 		end
-		local f = p.dispatch
+		local f = p.dispatch 		--获得协议中的 dispatch 函数
 		if f then
 			local ref = watching_service[source]
 			if ref then
@@ -544,7 +547,13 @@ local function raw_dispatch_message(prototype, msg, sz, session, source)
 	end
 end
 
---服务的消息处理回调函数
+--[[
+函数功能：服务的消息处理回调函数
+参数：
+	1）prototype消息类型，即skynet.h中定义的，2）msg消息内容，
+	3）sz消息大小，4）session对应回应哪条消息，5）source消息源
+返回值：无返回值
+]]
 function skynet.dispatch_message(...)
 	local succ, err = pcall(raw_dispatch_message,...) 	--调用函数raw_dispatch_message
 	while true do

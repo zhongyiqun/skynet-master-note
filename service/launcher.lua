@@ -126,7 +126,7 @@ end
 
 -- for historical reasons, launcher support text command (for C service)
 
-skynet.register_protocol {
+skynet.register_protocol {		--注册协议
 	name = "text",
 	id = skynet.PTYPE_TEXT,
 	unpack = skynet.tostring,
@@ -141,6 +141,7 @@ skynet.register_protocol {
 	end,
 }
 
+--修改协议名为"lua"的协议的 dispatch
 skynet.dispatch("lua", function(session, address, cmd , ...)
 	cmd = string.upper(cmd)
 	local f = command[cmd]
