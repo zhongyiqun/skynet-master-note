@@ -111,7 +111,7 @@ local function co_create(f)
 			f(...)
 			while true do
 				f = nil
-				coroutine_pool[#coroutine_pool+1] = co
+				coroutine_pool[#coroutine_pool+1] = co 	--该协程运行时将其句柄添加到协程池里
 				f = coroutine_yield "EXIT"
 				f(coroutine_yield())
 			end
@@ -191,8 +191,8 @@ function suspend(co, result, command, param, size)
 		end
 		return suspend(co, coroutine_resume(co, ret))
 	elseif command == "RESPONSE" then
-		local co_session = session_coroutine_id[co]
-		local co_address = session_coroutine_address[co]
+		local co_session = session_coroutine_id[co]   	--通过协程句柄获得对应的session
+		local co_address = session_coroutine_address[co] 	--通过协程句柄获得消息发送源source
 		if session_response[co] then
 			error(debug.traceback(co))
 		end
@@ -436,9 +436,10 @@ function skynet.ret(msg, sz)
 	return coroutine_yield("RETURN", msg, sz)
 end
 
+--挂起协程，传入 "RESPONSE", pack
 function skynet.response(pack)
-	pack = pack or skynet.pack
-	return coroutine_yield("RESPONSE", pack)
+	pack = pack or skynet.pack  	--打包函数为lua-seri.c中的luaseri_pack函数
+	return coroutine_yield("RESPONSE", pack)  --挂起协程，传入 "RESPONSE", pack
 end
 
 function skynet.retpack(...)
@@ -535,10 +536,10 @@ local function raw_dispatch_message(prototype, msg, sz, session, source)
 			else
 				watching_service[source] = 1
 			end
-			local co = co_create(f)
-			session_coroutine_id[co] = session
-			session_coroutine_address[co] = source
-			suspend(co, coroutine_resume(co, session,source, p.unpack(msg,sz)))
+			local co = co_create(f)		--创建一个协程，该协程运行时调用f函数
+			session_coroutine_id[co] = session  --将该协程和对应的session关联
+			session_coroutine_address[co] = source 	--将该协程和消息发送源source关联
+			suspend(co, coroutine_resume(co, session,source, p.unpack(msg,sz))) --先运行上面创建的协程传入的参数为 session,source, p.unpack(msg,sz)
 		elseif session ~= 0 then
 			c.send(source, skynet.PTYPE_ERROR, session, "")
 		else
@@ -575,6 +576,7 @@ function skynet.dispatch_message(...)
 	assert(succ, tostring(err))
 end
 
+--通过服务"launcher"启动一个snlua服务，服务名为name
 function skynet.newservice(name, ...)
 	return skynet.call(".launcher", "lua" , "LAUNCH", "snlua", name, ...)
 end

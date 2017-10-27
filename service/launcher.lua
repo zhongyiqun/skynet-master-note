@@ -76,6 +76,8 @@ end
 
 local function launch_service(service, ...)
 	local param = table.concat({...}, " ")
+	--启动一个服务，返回服务编号
+	--第一个参数为服务的动态库名，第二个参数为传入的参数，第二个参数用于服务初始化完后调用相应的lua脚本
 	local inst = skynet.launch(service, param)
 	local response = skynet.response()
 	if inst then
@@ -143,8 +145,8 @@ skynet.register_protocol {		--注册协议
 
 --修改协议名为"lua"的协议的 dispatch
 skynet.dispatch("lua", function(session, address, cmd , ...)
-	cmd = string.upper(cmd)
-	local f = command[cmd]
+	cmd = string.upper(cmd) --将字符都转换为大写
+	local f = command[cmd] 	--获得上面的command.函数
 	if f then
 		local ret = f(address, ...)
 		if ret ~= NORET then
@@ -155,4 +157,4 @@ skynet.dispatch("lua", function(session, address, cmd , ...)
 	end
 end)
 
-skynet.start(function() end)
+skynet.start(function() end) 	--注册服务的回调函数为skynet.dispatch_message

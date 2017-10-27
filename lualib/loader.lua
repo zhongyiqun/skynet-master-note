@@ -45,4 +45,4 @@ if LUA_PRELOAD then
 	LUA_PRELOAD = nil
 end
 
-main(select(2, table.unpack(args)))		--运行"./service/bootstrap.lua"文件
+main(select(2, table.unpack(args)))		--运行"./service/bootstrap.lua"文件 传入第二个参数之后的参数
