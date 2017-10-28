@@ -67,6 +67,13 @@ lnewpool(lua_State *L, int sz) {
 	return 1;
 }
 
+/***************************
+函数功能：在 lua 虚拟机中生成一个完全用户数据用作接收套接字信息的缓存列表
+lua调用时需要传入的参数：
+	无
+返回值：返回值的数量：1
+	1）userdata缓存列表
+***************************/
 static int
 lnewbuffer(lua_State *L) {
 	struct socket_buffer * sb = lua_newuserdata(L, sizeof(*sb));	
@@ -403,13 +410,23 @@ lunpack(lua_State *L) {
 	return 4;
 }
 
+/***************************
+函数功能：首先判断栈中的第port_index个参数是否为nil，为nil则从addr字符串中获得host和port
+		对于ipv6 addr的格式为"[host]:port"，对于ipv4 addr的格式为"host:port"
+		如果栈中的第port_index个参数不为nil，则host = addr，port为栈中的第port_index个参数
+lua调用时需要传入的参数：
+	1）L lua虚拟机，2）缓存，3）地址信息的字符串addr，4）栈中的第port_index个参数，5）返回端口号port
+返回值：返回值的数量：1
+	1）主机名host
+***************************/
 static const char *
 address_port(lua_State *L, char *tmp, const char * addr, int port_index, int *port) {
 	const char * host;
-	if (lua_isnoneornil(L,port_index)) {
-		host = strchr(addr, '[');
+	if (lua_isnoneornil(L,port_index)) { //当给定索引port_index无效或其值是 nil 时，返回 1，否则返回 0 
+										//即判断是否有第port_index个参数
+		host = strchr(addr, '[');	//查找地址字符串中首次出现'['的位置，返回其指针
 		if (host) {
-			// is ipv6
+			// is ipv6 addr的格式为"[host]:port"
 			++host;
 			const char * sep = strchr(addr,']');
 			if (sep == NULL) {
@@ -424,7 +441,7 @@ address_port(lua_State *L, char *tmp, const char * addr, int port_index, int *po
 			}
 			*port = strtoul(sep+1,NULL,10);
 		} else {
-			// is ipv4
+			// is ipv4 addr的格式为"host:port"
 			const char * sep = strchr(addr,':');
 			if (sep == NULL) {
 				luaL_error(L, "Invalid address %s.",addr);
@@ -441,45 +458,79 @@ address_port(lua_State *L, char *tmp, const char * addr, int port_index, int *po
 	return host;
 }
 
+/***************************
+函数功能：发起连接服务器主机名host，端口号port
+lua调用时需要传入的参数：
+	1）套接字的信息存储的id
+返回值：返回值的数量：1
+	1）成功返回存储套接字信息的id,否则返回-1
+***************************/
 static int
 lconnect(lua_State *L) {
 	size_t sz = 0;
-	const char * addr = luaL_checklstring(L,1,&sz);
+	const char * addr = luaL_checklstring(L,1,&sz); 	//检查函数的第 1 个参数是否是一个字符串，并返回该字符串，将字符串的长度填入sz 
 	char tmp[sz];
 	int port = 0;
-	const char * host = address_port(L, tmp, addr, 2, &port);
+	const char * host = address_port(L, tmp, addr, 2, &port);	//从addr中获得host和port
 	if (port == 0) {
 		return luaL_error(L, "Invalid port");
 	}
-	struct skynet_context * ctx = lua_touserdata(L, lua_upvalueindex(1));
+	struct skynet_context * ctx = lua_touserdata(L, lua_upvalueindex(1)); 	//获得服务信息指针
+	//发送命令'O'，发起连接服务器主机名host，端口号port，成功返回存储套接字信息的id,否则返回-1
 	int id = skynet_socket_connect(ctx, host, port);
 	lua_pushinteger(L, id);
 
 	return 1;
 }
 
+/***************************
+函数功能：关闭指定的套接字
+lua调用时需要传入的参数：
+	1）套接字的信息存储的id
+返回值：返回值的数量：0
+	
+***************************/
 static int
 lclose(lua_State *L) {
-	int id = luaL_checkinteger(L,1);
-	struct skynet_context * ctx = lua_touserdata(L, lua_upvalueindex(1));
+	int id = luaL_checkinteger(L,1); 	//第一个参数，套接字的信息存储的id
+	struct skynet_context * ctx = lua_touserdata(L, lua_upvalueindex(1)); 	//获得服务信息指针
+	//发送命令'K'，发起一个关闭某个指定套接字的请求，通过id可以定位的套接字的信息
 	skynet_socket_close(ctx, id);
 	return 0;
 }
 
+/***************************
+函数功能：强制关闭套接字
+lua调用时需要传入的参数：
+	1）套接字的信息存储的id
+返回值：返回值的数量：0
+	
+***************************/
 static int
 lshutdown(lua_State *L) {
-	int id = luaL_checkinteger(L,1);
-	struct skynet_context * ctx = lua_touserdata(L, lua_upvalueindex(1));
+	int id = luaL_checkinteger(L,1); 	//第一个参数，套接字的信息存储的id
+	struct skynet_context * ctx = lua_touserdata(L, lua_upvalueindex(1)); //获得服务信息指针
+	//发送命令'K'，强制关闭套接字
 	skynet_socket_shutdown(ctx, id);
 	return 0;
 }
 
+/***************************
+函数功能：发送命令'L'，发起绑定主机名host,端口号port，并监听命令
+		连接请求队列的最大长度为backlog，成功返回存储套接字信息的id
+lua调用时需要传入的参数：
+	1）主机名host，2）端口号port，3）backlog，如果为nil则默认为32
+返回值：返回值的数量：1
+	1）成功返回存储套接字信息的id
+***************************/
 static int
 llisten(lua_State *L) {
-	const char * host = luaL_checkstring(L,1);
-	int port = luaL_checkinteger(L,2);
-	int backlog = luaL_optinteger(L,3,BACKLOG);
-	struct skynet_context * ctx = lua_touserdata(L, lua_upvalueindex(1));
+	const char * host = luaL_checkstring(L,1); 	//检查函数的第 1 个参数是否是一个字符串并返回这个字符串
+	int port = luaL_checkinteger(L,2);			//检查函数的第 2 个参数是否是一个整数并返回这个整数
+	int backlog = luaL_optinteger(L,3,BACKLOG);	//如果函数的第 3 个参数是一个整数，返回该整数。若该参数不存在或是nil，返回 BACKLOG=32
+	struct skynet_context * ctx = lua_touserdata(L, lua_upvalueindex(1));	//获得服务信息的指针
+	//发送命令'L'，发起绑定主机名host，端口号port,并监听命令
+	//连接请求队列的最大长度为backlog，成功返回存储套接字信息的id,否则返回-1
 	int id = skynet_socket_listen(ctx, host,port,backlog);
 	if (id < 0) {
 		return luaL_error(L, "Listen error");
@@ -489,20 +540,36 @@ llisten(lua_State *L) {
 	return 1;
 }
 
+/***************************
+函数功能：获得lua表中元素的总长度，通过将每个元素转换成字符串的形式来计算
+	
+参数：
+	1）lua虚拟机环境，2）表在栈中的位置index
+返回值：返回值的数量：1
+	1）总长度
+***************************/
 static size_t
 count_size(lua_State *L, int index) {
 	size_t tlen = 0;
 	int i;
-	for (i=1;lua_geti(L, index, i) != LUA_TNIL; ++i) {
+	for (i=1;lua_geti(L, index, i) != LUA_TNIL; ++i) { //将表中的元素依次入栈
 		size_t len;
-		luaL_checklstring(L, -1, &len);
+		luaL_checklstring(L, -1, &len);	//获得每个元素的长度
 		tlen += len;
-		lua_pop(L,1);
+		lua_pop(L,1);	//将入栈的元素出栈
 	}
 	lua_pop(L,1);
 	return tlen;
 }
 
+/***************************
+函数功能：将lua表中元素依次拷贝到缓存buffer中
+	
+参数：
+	1）lua虚拟机环境，2）表在栈中的位置index，3）缓存buffer，4）表中元素的总长度tlen
+返回值：返回值的数量：0
+	
+***************************/
 static void
 concat_table(lua_State *L, int index, void *buffer, size_t tlen) {
 	char *ptr = buffer;
@@ -525,26 +592,36 @@ concat_table(lua_State *L, int index, void *buffer, size_t tlen) {
 	lua_pop(L,1);
 }
 
+/***************************
+函数功能：获得栈中的第index个元素的数据，可以是以下几种类型的数据
+	1）指针类型的，则第index+1个元素为数据的大小
+	2）表类型，
+	3）默认情况为字符串类型，
+lua调用时需要传入的参数：
+	1）lua虚拟机，2）栈中第index个元素，3）数据的长度sz
+返回值：返回值的数量：1
+	1）指向数据的指针
+***************************/
 static void *
 get_buffer(lua_State *L, int index, int *sz) {
 	void *buffer;
-	switch(lua_type(L, index)) {
+	switch(lua_type(L, index)) { 	//获得栈中索引处的值得类型
 		const char * str;
 		size_t len;
 	case LUA_TUSERDATA:
 	case LUA_TLIGHTUSERDATA:
-		buffer = lua_touserdata(L,index);
-		*sz = luaL_checkinteger(L,index+1);
+		buffer = lua_touserdata(L,index);	//获得数据的指针
+		*sz = luaL_checkinteger(L,index+1);	//获得数据的大小
 		break;
 	case LUA_TTABLE:
 		// concat the table as a string
-		len = count_size(L, index);
-		buffer = skynet_malloc(len);
-		concat_table(L, index, buffer, len);
-		*sz = (int)len;
+		len = count_size(L, index);		//获得表中元素的总长度
+		buffer = skynet_malloc(len);	//分配内存
+		concat_table(L, index, buffer, len); //将lua表中元素依次拷贝到缓存buffer中
+		*sz = (int)len;		//表中元素的总长度
 		break;
 	default:
-		str =  luaL_checklstring(L, index, &len);
+		str =  luaL_checklstring(L, index, &len);	
 		buffer = skynet_malloc(len);
 		memcpy(buffer, str, len);
 		*sz = (int)len;
@@ -555,10 +632,10 @@ get_buffer(lua_State *L, int index, int *sz) {
 
 static int
 lsend(lua_State *L) {
-	struct skynet_context * ctx = lua_touserdata(L, lua_upvalueindex(1));
-	int id = luaL_checkinteger(L, 1);
+	struct skynet_context * ctx = lua_touserdata(L, lua_upvalueindex(1));	//获得服务信息的指针
+	int id = luaL_checkinteger(L, 1);	//检查函数的第 1 个参数是否是一个整数并返回这个整数
 	int sz = 0;
-	void *buffer = get_buffer(L, 2, &sz);
+	void *buffer = get_buffer(L, 2, &sz); 	//获得栈中的第2个参数的数据，放入缓存buffer
 	int err = skynet_socket_send(ctx, id, buffer, sz);
 	lua_pushboolean(L, !err);
 	return 1;
@@ -697,7 +774,7 @@ luaopen_skynet_socketdriver(lua_State *L) {
 		{ "unpack", lunpack },
 		{ NULL, NULL },
 	};
-	luaL_newlib(L,l);
+	luaL_newlib(L,l);	//创建一张新的表，并把列表 l 中的函数注册进去
 	luaL_Reg l2[] = {
 		{ "connect", lconnect },
 		{ "close", lclose },
@@ -714,13 +791,13 @@ luaopen_skynet_socketdriver(lua_State *L) {
 		{ "udp_address", ludp_address },
 		{ NULL, NULL },
 	};
-	lua_getfield(L, LUA_REGISTRYINDEX, "skynet_context");
-	struct skynet_context *ctx = lua_touserdata(L,-1);
+	lua_getfield(L, LUA_REGISTRYINDEX, "skynet_context"); //将服务信息指针入栈
+	struct skynet_context *ctx = lua_touserdata(L,-1);	//获得服务信息指针
 	if (ctx == NULL) {
 		return luaL_error(L, "Init skynet context first");
 	}
 
-	luaL_setfuncs(L,l2,1);
+	luaL_setfuncs(L,l2,1);	//将表l2中的所有函数注册到栈顶，这些函数共享服务信息指针这个upvalue
 
 	return 1;
 }

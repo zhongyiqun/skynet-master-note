@@ -46,8 +46,8 @@ function skynet.register_protocol(class)
 end
 
 local session_id_coroutine = {}		--以session为键，记录消息返回响应对应的发生消息session，调用的处理协同程序
-local session_coroutine_id = {}		--技能协程处理的响应消息session
-local session_coroutine_address = {}
+local session_coroutine_id = {}		--记录协程处理的消息session
+local session_coroutine_address = {} 	--记录协程处理的消息的发送源source
 local session_response = {}
 local unresponse = {}
 
